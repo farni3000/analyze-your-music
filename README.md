@@ -15,6 +15,7 @@ This app builds a weekly listening report from Last.fm, adds recommendations, an
 - Top artists, top albums, top tracks, weekday activity, top taste tags
 - Album recommendations (4 total): 1 local-LLM pick + 3 heuristic picks (with heuristic fill if needed)
 - Top 8 most-reviewed releases from Album of the Year
+- Rate Your Music enrichment: adds the RYM average score and rating count per release
 - Monthly cached full listening-history sync (artist listen counts) in `.listening_history.json`
 - New-release highlighting when you've listened to that artist at least 3 times
 - Friday scheduler mode with configurable run time (default `19:00`)
@@ -50,6 +51,9 @@ RECOMMENDATION_LIMIT=4
 FRIDAY_RUN_HOUR=19
 FRIDAY_RUN_MINUTE=0
 AOTY_BASE_URL=https://www.albumoftheyear.org
+RYM_ENABLED=true
+RYM_BROWSER_TIMEOUT_SECONDS=40
+RYM_MAX_ARTIST_LOOKUPS=15
 LLM_ENABLED=true
 LLM_PROVIDER=ollama
 LLM_API_KEY=
@@ -101,6 +105,23 @@ installed Chrome major version, and re-signs the patched driver, so Rosetta is
 not required. If AOTY suddenly returns nothing after a macOS or Chrome update,
 check the `## Debug` section of the newest report: the browser fallback status
 and any driver error are recorded there.
+
+## Rate Your Music notes
+
+The RYM section adds an `RYM Score` and `RYM Ratings` column next to the AOTY
+scores. RYM is behind Cloudflare too, and its direct `/release/` pages answer
+automation with HTTP 503, so the scores come from pages that do render:
+
+1. the `/new-music/` feed is fetched once and matched by artist + album;
+2. for the remaining releases, each artist's discography page (`/artist/<slug>/`)
+   is fetched and the album is matched against the per-release average rating.
+
+Both steps reuse the same headed `undetected-chromedriver` browser as AOTY
+(`RYM_ENABLED=true` requires `AOTY_BROWSER_ENABLED=true`). Because each artist
+lookup is a separate browser launch, enrichment is the slowest part of a run
+(roughly 20-70 s per unmatched artist). Cap it with `RYM_MAX_ARTIST_LOOKUPS`
+(default `15`); set `RYM_ENABLED=false` to skip it entirely. Releases without a
+RYM match are shown as `rym: n/a [0]`.
 
 ## Gmail notes
 

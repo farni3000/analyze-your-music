@@ -64,11 +64,12 @@ and a per-release tag dump. Add debug fields here rather than printing to stdout
 | `src/listening_history.py` | Cached long-term artist listen counts (`.listening_history.json`) |
 | `src/recommender.py` | Similar-artist expansion + heuristic scoring + LLM album picks |
 | `src/aoty.py` | AOTY scraper: browser → HTML → JSON-LD → Jina fallbacks; dedupe/rank |
-| `src/browser_fetch.py` | Isolated undetected-chromedriver worker for Cloudflare-protected AOTY |
+| `src/rym.py` | Rate Your Music enrichment: new-music feed + per-artist discography lookup |
+| `src/browser_fetch.py` | Isolated undetected-chromedriver worker for Cloudflare-protected AOTY/RYM |
 | `src/llm.py` | Chat-completion helpers for Ollama + OpenAI; JSON-only responses |
 | `src/report.py` | Markdown + HTML rendering; `write_report()` saves under `reports/` |
 | `src/emailer.py` | `send_report_email()` via `smtplib.SMTP_SSL` (Gmail app password) |
-| `tests/` | `test_aoty.py` + `test_metal_filter.py` (pytest style), `test_listening_history.py` (unittest) |
+| `tests/` | `test_aoty.py` + `test_metal_filter.py` + `test_rym.py` (pytest style), `test_listening_history.py` (unittest) |
 
 Runtime artifacts (gitignored): `reports/`, `.report_state.json`,
 `.listening_history.json`, `.env`.
@@ -78,11 +79,14 @@ Runtime artifacts (gitignored): `reports/`, `.report_state.json`,
 1. `current_week_window` → 7-day rolling window; `summarize_week` pulls recent tracks.
 2. `fetch_top_weekly_releases` (AOTY, limit 200) → filtered/annotated via
    `_annotate_and_filter_releases` (inclusion flags + metal-tag check).
-3. `get_artist_listen_counts` (cache read, refresh if older than refresh_days).
-4. `recommend_albums` → candidates from similar artists, optional LLM pick on top,
+3. `get_rym_ratings` (if `RYM_ENABLED`) enriches those rows with `rym_score`/
+   `rym_rating_count`/`rym_url`: RYM `/new-music/` first, then per-artist
+   discography for the rest (`_attach_rym_ratings`).
+4. `get_artist_listen_counts` (cache read, refresh if older than refresh_days).
+5. `recommend_albums` → candidates from similar artists, optional LLM pick on top,
    heuristic fill; drops albums with `album_playcount > 20` (`KNOWN_ALBUM_PLAYS_THRESHOLD`).
-5. Recommendations dropped when already in the release section; enriched with AOTY scores/URLs.
-6. `render_markdown` / `render_email_html` → `write_report` → optional email.
+6. Recommendations dropped when already in the release section; enriched with AOTY scores/URLs.
+7. `render_markdown` / `render_email_html` → `write_report` → optional email.
 
 ## Key conventions & invariants
 
@@ -100,8 +104,9 @@ Runtime artifacts (gitignored): `reports/`, `.report_state.json`,
   get HTTP 403 / "Just a moment...". The working access path is
   `src/browser_fetch.py`, which drives a real **headed** Chrome via
   `undetected-chromedriver` in a separate subprocess. It returns the rendered
-  HTML once `div.albumBlock` appears. Headless is detected and stays on the
-  challenge, so `AOTY_BROWSER_HEADLESS=false` is required.
+  HTML once its `ready_marker` appears (default `div.albumBlock` for AOTY).
+  Headless is detected and stays on the challenge, so `AOTY_BROWSER_HEADLESS=false`
+  is required.
 - **Apple Silicon driver handling** (added after an empty-tab regression): uc
   3.5.5 hardcodes the `mac-x64` ChromeDriver, which needs Rosetta (often broken
   after a macOS update) on an arm64 Mac. `src/browser_fetch.py` fixes three
@@ -129,6 +134,21 @@ Runtime artifacts (gitignored): `reports/`, `.report_state.json`,
 - If the browser fallback is disabled / unavailable, `fetch_top_weekly_releases`
   returns `[]` and the debug section reports `AOTY fetch: empty (blocked or no
   releases)`. That is an access problem, not a parser problem.
+- **RYM is also Cloudflare-protected, and its `/release/` pages return HTTP 503
+  to automation** (confirmed with the same headed uc browser). The pages that do
+  render are `/new-music/` (25 items with `.newreleases_avg_rating_stat`), the
+  per-artist discography (`/artist/<slug>/`, `.disco_release` rows with
+  `.disco_avg_rating`/`.disco_ratings`) and `/search`. `src/rym.py` therefore
+  enriches in two steps: match against the new-music feed, then look up the
+  remaining artists via their discography (slug guess, `/search` fallback).
+  Matching uses `_match_key` (lowercase, non-alnum → space, **parentheticals kept**)
+  so deluxe/`(Continued)` editions are not fuzzily conflated; `rym_album` is kept
+  for verification. The browser worker takes a `ready_marker` argument
+  (default `albumblock` for AOTY; RYM passes `newreleases_itembox`/`disco_release`/
+  `page_search_results`), so it no longer waits the full timeout on RYM.
+- `RYM_MAX_ARTIST_LOOKUPS` caps the per-artist browser launches (each ~20–70 s);
+  `RYM_ENABLED=false` skips enrichment. If the browser fallback is off, RYM
+  enrichment reports `skipped (browser fallback disabled)`.
 - Network is unreliable: `LastFMClient._get` retries up to 8 times (429/5xx/DNS).
   New fetch code should degrade gracefully (empty list) rather than crash the run.
 - LLM output must be strict JSON (`{"recommendations": [...]}`); `_extract_json_object`
@@ -165,7 +185,8 @@ Releases that look metal-ish are rendered with the `metal-release` CSS class
 Config fields live in `src/config.py` (`AppConfig`). Notable knobs:
 `RECOMMENDATION_LIMIT` (default 4), `LOW_HISTORY_THRESHOLD`,
 `RELEASE_HIGHLIGHT_MIN_ARTIST_LISTENS`, `AOTY_BROWSER_ENABLED` /
-`AOTY_BROWSER_HEADLESS` / `AOTY_BROWSER_TIMEOUT_SECONDS`, `LLM_PROVIDER`
+`AOTY_BROWSER_HEADLESS` / `AOTY_BROWSER_TIMEOUT_SECONDS`, `RYM_ENABLED` /
+`RYM_BROWSER_TIMEOUT_SECONDS` / `RYM_MAX_ARTIST_LOOKUPS`, `LLM_PROVIDER`
 (`ollama`|`openai`), `OLLAMA_*`, `EMAIL_ENABLED` + `SMTP_*`. When adding a
 setting, add the field to `AppConfig`, read it in `load_config()`, and mirror it
 in `.env.example`.

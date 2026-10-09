@@ -100,7 +100,17 @@ def _debug_lines(
         tag_text = ", ".join(str(tag) for tag in tags) or "-"
         source = str(release.get("tag_source", "none"))
         metal_flag = "METAL " if release.get("is_metal_tagged") else ""
-        lines.append(f"- {metal_flag}{artist} - {album} [source={source}]: {tag_text}")
+        rym_score = str(release.get("rym_score", "")).strip() or "-"
+        rym_count = int(release.get("rym_rating_count", 0) or 0)
+        rym_source = str(release.get("rym_source", "")).strip() or "-"
+        rym_album = str(release.get("rym_album", "")).strip()
+        rym_detail = f"rym={rym_score}/{rym_count} ({rym_source}"
+        if rym_album and rym_album.lower() != album.lower():
+            rym_detail += f", matched={rym_album}"
+        rym_detail += ")"
+        lines.append(
+            f"- {metal_flag}{artist} - {album} [source={source}; {rym_detail}]: {tag_text}"
+        )
     return lines
 
 
@@ -162,21 +172,19 @@ def render_markdown(
                 release.get("user_score", ""),
                 allow_hot=user_reviews > 30,
             )
+            rym_score = str(release.get("rym_score", "")).strip() or "n/a"
+            rym_count = int(release.get("rym_rating_count", 0) or 0)
             url = release.get("url", "").strip()
             metal_tag = " [METAL-TAGGED]" if bool(release.get("is_metal_tagged", False)) else ""
             debug_suffix = _release_debug_suffix(release)
+            details = (
+                f"(plays: {artist_plays}, user: {user_score} [{user_reviews}], "
+                f"critic: {critic_score} [{critic_reviews}], rym: {rym_score} [{rym_count}])"
+            )
             if url:
-                lines.append(
-                    f"{i}. {artist} - {album}{metal_tag} "
-                    f"(plays: {artist_plays}, user: {user_score} [{user_reviews}], critic: {critic_score} [{critic_reviews}]) - {url}"
-                    f"{debug_suffix}"
-                )
+                lines.append(f"{i}. {artist} - {album}{metal_tag} {details} - {url}{debug_suffix}")
             else:
-                lines.append(
-                    f"{i}. {artist} - {album}{metal_tag} "
-                    f"(plays: {artist_plays}, user: {user_score} [{user_reviews}], critic: {critic_score} [{critic_reviews}])"
-                    f"{debug_suffix}"
-                )
+                lines.append(f"{i}. {artist} - {album}{metal_tag} {details}{debug_suffix}")
     lines.append("")
     lines.append("## Album Recommendations")
     if not recommendations:
@@ -223,8 +231,14 @@ def render_email_html(
         critic_reviews = int(release.get("critic_review_count", 0) or 0)
         critic_score = str(release.get("critic_score", "")).strip() or "n/a"
         user_score = str(release.get("user_score", "")).strip() or "n/a"
+        rym_score = str(release.get("rym_score", "")).strip() or "n/a"
+        rym_count = int(release.get("rym_rating_count", 0) or 0)
+        rym_url = str(release.get("rym_url", "")).strip()
         url = release.get("url", "").strip()
         album_cell = _esc(album) if not url else f"<a href='{_esc(url)}'>{_esc(album)}</a>"
+        rym_cell = _metric_chip_html(rym_score)
+        if rym_url:
+            rym_cell = f"<a href='{_esc(rym_url)}'>{rym_cell}</a>"
         row_classes: list[str] = []
         if bool(release.get("is_metal_tagged", False)):
             row_classes.append("metal-release")
@@ -237,10 +251,12 @@ def render_email_html(
             f"<td>{_metric_chip_html(user_score, active=bool(release.get('highlight_user_score', False)), hot=user_score_hot)}</td>"
             f"<td>{_metric_chip_html(user_reviews, active=bool(release.get('highlight_user_reviews', False)))}</td>"
             f"<td>{_metric_chip_html(critic_score, active=bool(release.get('highlight_critic_score', False)), hot=critic_score_hot)}</td>"
-            f"<td>{_metric_chip_html(critic_reviews, active=bool(release.get('highlight_critic_reviews', False)))}</td></tr>"
+            f"<td>{_metric_chip_html(critic_reviews, active=bool(release.get('highlight_critic_reviews', False)))}</td>"
+            f"<td>{rym_cell}</td>"
+            f"<td>{_metric_chip_html(rym_count)}</td></tr>"
         )
     if not release_rows:
-        release_rows.append("<tr><td colspan='7'>No releases matched the current inclusion rules this run.</td></tr>")
+        release_rows.append("<tr><td colspan='9'>No releases matched the current inclusion rules this run.</td></tr>")
 
     rec_rows: list[str] = []
     for rec in recommendations[:4]:
@@ -440,7 +456,7 @@ def render_email_html(
     </div>
     <div class="section">
       <h2>New Releases This Week (Album of the Year, filtered)</h2>
-      <table><tr><th>Artist</th><th>Album</th><th>Your Artist Plays</th><th>User Score</th><th>User Reviews</th><th>Critic Score</th><th>Critic Reviews</th></tr>{"".join(release_rows)}</table>
+      <table><tr><th>Artist</th><th>Album</th><th>Your Artist Plays</th><th>User Score</th><th>User Reviews</th><th>Critic Score</th><th>Critic Reviews</th><th>RYM Score</th><th>RYM Ratings</th></tr>{"".join(release_rows)}</table>
     </div>
     <div class="section"><h2>Top Artists</h2><table>{top_artists_html}</table></div>
     <div class="section"><h2>Top Albums</h2><table>{top_albums_html}</table></div>

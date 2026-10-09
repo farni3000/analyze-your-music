@@ -118,7 +118,13 @@ def _kill_orphan_chrome(user_data_dir: str) -> None:
         pass
 
 
-def _worker(url: str, output_path: str, headless: bool, timeout_seconds: int) -> None:
+def _worker(
+    url: str,
+    output_path: str,
+    headless: bool,
+    timeout_seconds: int,
+    ready_marker: str = "albumblock",
+) -> None:
     import traceback
 
     error_path = output_path + ".err"
@@ -130,6 +136,7 @@ def _worker(url: str, output_path: str, headless: bool, timeout_seconds: int) ->
     import undetected_chromedriver as uc
 
     timeout_seconds = max(timeout_seconds, 1)
+    marker = (ready_marker or "albumblock").lower()
     options = uc.ChromeOptions()
     options.add_argument("--no-first-run")
     options.add_argument("--disable-extensions")
@@ -160,7 +167,7 @@ def _worker(url: str, output_path: str, headless: bool, timeout_seconds: int) ->
                 html = driver.page_source or ""
             except Exception:
                 html = ""
-            if "albumblock" in html.lower():
+            if marker in html.lower():
                 break
     except Exception:
         error_text = traceback.format_exc()
@@ -193,7 +200,13 @@ def _worker(url: str, output_path: str, headless: bool, timeout_seconds: int) ->
         os._exit(0)
 
 
-def fetch_with_browser(url: str, *, headless: bool, timeout_seconds: int) -> str:
+def fetch_with_browser(
+    url: str,
+    *,
+    headless: bool,
+    timeout_seconds: int,
+    ready_marker: str = "albumblock",
+) -> str:
     timeout_seconds = max(timeout_seconds, 1)
     with tempfile.TemporaryDirectory() as temp_dir:
         output_path = os.path.join(temp_dir, "page.html")
@@ -206,11 +219,12 @@ def fetch_with_browser(url: str, *, headless: bool, timeout_seconds: int) -> str
             output_path,
             "1" if headless else "0",
             str(timeout_seconds),
+            ready_marker,
         ]
         try:
             completed = subprocess.run(
                 command,
-                timeout=timeout_seconds + 30,
+                timeout=timeout_seconds * 2 + 30,
                 check=False,
                 close_fds=False,
                 capture_output=True,
@@ -243,4 +257,5 @@ def fetch_with_browser(url: str, *, headless: bool, timeout_seconds: int) -> str
 
 
 if __name__ == "__main__":
-    _worker(sys.argv[1], sys.argv[2], sys.argv[3] == "1", int(sys.argv[4]))
+    marker = sys.argv[5] if len(sys.argv) > 5 else "albumblock"
+    _worker(sys.argv[1], sys.argv[2], sys.argv[3] == "1", int(sys.argv[4]), marker)

@@ -24,6 +24,9 @@ class AppConfig:
     aoty_browser_enabled: bool = True
     aoty_browser_headless: bool = False
     aoty_browser_timeout_seconds: int = 40
+    rym_enabled: bool = True
+    rym_browser_timeout_seconds: int = 40
+    rym_max_artist_lookups: int = 15
     llm_enabled: bool = False
     llm_provider: str = "ollama"
     llm_api_key: str = ""
@@ -73,6 +76,9 @@ def load_config() -> AppConfig:
     aoty_browser_enabled = os.getenv("AOTY_BROWSER_ENABLED", "true").strip().lower() in {"1", "true", "yes", "on"}
     aoty_browser_headless = os.getenv("AOTY_BROWSER_HEADLESS", "false").strip().lower() in {"1", "true", "yes", "on"}
     aoty_browser_timeout_seconds = int(os.getenv("AOTY_BROWSER_TIMEOUT_SECONDS", "40"))
+    rym_enabled = os.getenv("RYM_ENABLED", "true").strip().lower() in {"1", "true", "yes", "on"}
+    rym_browser_timeout_seconds = int(os.getenv("RYM_BROWSER_TIMEOUT_SECONDS", "40"))
+    rym_max_artist_lookups = int(os.getenv("RYM_MAX_ARTIST_LOOKUPS", "15"))
     llm_enabled = os.getenv("LLM_ENABLED", "false").strip().lower() in {"1", "true", "yes", "on"}
     llm_provider = os.getenv("LLM_PROVIDER", "ollama").strip().lower()
     llm_api_key = os.getenv("LLM_API_KEY", "").strip()
@@ -111,6 +117,10 @@ def load_config() -> AppConfig:
         raise ValueError("LLM_ENABLED=true and LLM_PROVIDER=openai require LLM_API_KEY.")
     if aoty_browser_timeout_seconds <= 0:
         raise ValueError("AOTY_BROWSER_TIMEOUT_SECONDS must be greater than 0.")
+    if rym_browser_timeout_seconds <= 0:
+        raise ValueError("RYM_BROWSER_TIMEOUT_SECONDS must be greater than 0.")
+    if rym_max_artist_lookups < 0:
+        raise ValueError("RYM_MAX_ARTIST_LOOKUPS must be zero or greater.")
     if listening_history_refresh_days <= 0:
         raise ValueError("LISTENING_HISTORY_REFRESH_DAYS must be greater than 0.")
     if release_highlight_min_artist_listens <= 0:
@@ -137,6 +147,9 @@ def load_config() -> AppConfig:
         aoty_browser_enabled=aoty_browser_enabled,
         aoty_browser_headless=aoty_browser_headless,
         aoty_browser_timeout_seconds=aoty_browser_timeout_seconds,
+        rym_enabled=rym_enabled,
+        rym_browser_timeout_seconds=rym_browser_timeout_seconds,
+        rym_max_artist_lookups=rym_max_artist_lookups,
         llm_enabled=llm_enabled,
         llm_provider=llm_provider,
         llm_api_key=llm_api_key,

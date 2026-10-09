@@ -16,6 +16,7 @@ from .lastfm import LastFMClient
 from .listening_history import artist_listen_count, get_artist_listen_counts
 from .recommender import recommend_albums
 from .report import render_email_html, render_markdown, write_report
+from .rym import get_rym_ratings
 
 
 STATE_FILE = ".report_state.json"
@@ -149,6 +150,17 @@ def _annotate_and_filter_releases(
     return out
 
 
+def _attach_rym_ratings(releases: list[dict], lookup: dict[str, dict]) -> None:
+    for row in releases:
+        key = normalize_album_key(str(row.get("artist", "")), str(row.get("album", "")))
+        match = lookup.get(key, {})
+        row["rym_score"] = str(match.get("score", "")).strip()
+        row["rym_rating_count"] = int(match.get("count", 0) or 0)
+        row["rym_url"] = str(match.get("url", "")).strip()
+        row["rym_album"] = str(match.get("album", "")).strip()
+        row["rym_source"] = str(match.get("source", "")).strip()
+
+
 def _enrich_recommendations_with_aoty(
     recommendations: list[dict],
     weekly_releases: list[dict],
@@ -240,6 +252,25 @@ def run_once() -> str:
         releases=weekly_releases_all,
         artist_listen_counts=artist_listen_counts,
     )
+    rym_status = "disabled"
+    rym_stats: dict = {}
+    if config.rym_enabled:
+        rym_requests = [
+            (str(row.get("artist", "")), str(row.get("album", ""))) for row in weekly_releases
+        ]
+        try:
+            rym_lookup, rym_stats = get_rym_ratings(
+                rym_requests,
+                browser_enabled=config.aoty_browser_enabled,
+                browser_headless=config.aoty_browser_headless,
+                browser_timeout_seconds=config.rym_browser_timeout_seconds,
+                max_artist_lookups=config.rym_max_artist_lookups,
+            )
+            rym_status = str(rym_stats.get("status", "ok"))
+        except Exception as exc:
+            rym_lookup = {}
+            rym_status = f"error: {type(exc).__name__}: {exc}"
+        _attach_rym_ratings(weekly_releases, rym_lookup)
     recommendation_fetch_limit = max(config.recommendation_limit * 3, config.recommendation_limit + 8)
     recommendations = recommend_albums(
         client,
@@ -267,6 +298,10 @@ def run_once() -> str:
         f"AOTY fetch: {aoty_status}",
         f"AOTY browser fallback: enabled={config.aoty_browser_enabled} headless={config.aoty_browser_headless} timeout={config.aoty_browser_timeout_seconds}s",
         f"Releases before filtering: {len(weekly_releases_all)}",
+        f"RYM fetch: {rym_status}",
+        f"RYM enriched rows: {sum(1 for row in weekly_releases if row.get('rym_score'))}"
+        f" of {len(weekly_releases)} (new-music items: {rym_stats.get('new_releases', 0)},"
+        f" artist lookups: {rym_stats.get('artist_lookups', 0)})",
         f"LLM enabled: {config.llm_enabled} (provider: {config.llm_provider})",
         f"Email enabled: {config.email_enabled}",
     ]
