@@ -77,6 +77,13 @@ SMTP_PASSWORD=your_gmail_app_password
 
 ## Run
 
+Beides geht über das Startskript:
+
+```bash
+./start.sh          # Scheduler-Loop (Freitags-Report)
+./start.sh --once   # einen Report jetzt erzeugen
+```
+
 Generate one report immediately:
 
 ```bash

@@ -33,6 +33,13 @@ python3 -m src.main --schedule               # Friday scheduler loop
 python3 -m pytest                            # run tests (pytest + unittest)
 ```
 
+Or use the start script (creates the venv if needed):
+
+```bash
+./start.sh          # scheduler loop
+./start.sh --once   # one report now
+```
+
 Entry point is `src/main.py`. Modules are imported package-relative
 (`from .lastfm import LastFMClient`), so always run as `python3 -m src.main`,
 never `python3 src/main.py`.
