@@ -180,6 +180,22 @@ Releases that look metal-ish are rendered with the `metal-release` CSS class
 - If a release is not grayed out, first check its `tags`/`tag_source` in the
   report's `### Per-release tags` dump before touching the matching logic.
 
+## Release highlighting (release rows)
+
+Highlight levels are flags on the row (`highlight_*`), set in `src/main.py`:
+AOTY/AOTY-review rules in `_annotate_and_filter_releases`, RYM rules in
+`_annotate_rym_highlights` (after `_attach_rym_ratings`, so RYM never affects
+inclusion). Thresholds: artist plays `> 10` / super `> 1000`, user score
+`> 78` + reviews `> 30`, critic score `> 77` + reviews `> 5`, user reviews
+`> 800`, RYM score `>= 3.6` / super `>= 3.8`, RYM ratings `>= 1000` / super
+`>= 2000` (`RYM_*` constants in `src/main.py`).
+
+`src/report.py` maps them to HTML chips: `active` → `metric-hit`, `hot` →
+`score-hot`; markdown uses `*` (highlight) and `**` (super) via
+`_value_with_markers`. If a highlight is missing, check the `flags=` dump of
+`_release_debug_suffix` in the report first. Covered by
+`tests/test_report_highlights.py`.
+
 ## Config surface to know
 
 Config fields live in `src/config.py` (`AppConfig`). Notable knobs:

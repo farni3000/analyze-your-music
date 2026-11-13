@@ -27,9 +27,13 @@ def _float_or_zero(value: object) -> float:
         return 0.0
 
 
-def _score_text_with_marker(value: object, *, allow_hot: bool = True) -> str:
+def _value_with_markers(value: object, *, highlight: bool = False, hot: bool = False) -> str:
     text = str(value).strip() or "n/a"
-    return f"{text} *" if allow_hot and _float_or_zero(text) > 84 else text
+    if hot:
+        return f"{text} **"
+    if highlight:
+        return f"{text} *"
+    return text
 
 
 def _metric_chip_html(value: object, *, active: bool = False, hot: bool = False) -> str:
@@ -61,6 +65,10 @@ def _release_debug_suffix(release: dict) -> str:
             ("user", release.get("highlight_user_score")),
             ("user_reviews", release.get("highlight_user_reviews")),
             ("critic", release.get("highlight_critic_score")),
+            ("rym", release.get("highlight_rym_score")),
+            ("rym_super", release.get("highlight_rym_score_super")),
+            ("rym_ratings", release.get("highlight_rym_ratings")),
+            ("rym_ratings_super", release.get("highlight_rym_ratings_super")),
         )
         if active
     ]
@@ -164,22 +172,34 @@ def render_markdown(
             artist_plays = int(release.get("artist_plays", artist_listen_count(artist_listen_counts, artist)) or 0)
             user_reviews = int(release.get("user_review_count", release.get("review_count", 0)) or 0)
             critic_reviews = int(release.get("critic_review_count", 0) or 0)
-            critic_score = _score_text_with_marker(
+            critic_score = _value_with_markers(
                 release.get("critic_score", ""),
-                allow_hot=critic_reviews > 5,
+                highlight=bool(release.get("highlight_critic_score", False)),
+                hot=_float_or_zero(release.get("critic_score", "")) > 84 and critic_reviews > 5,
             )
-            user_score = _score_text_with_marker(
+            user_score = _value_with_markers(
                 release.get("user_score", ""),
-                allow_hot=user_reviews > 30,
+                highlight=bool(release.get("highlight_user_score", False)),
+                hot=_float_or_zero(release.get("user_score", "")) > 84 and user_reviews > 30,
             )
             rym_score = str(release.get("rym_score", "")).strip() or "n/a"
             rym_count = int(release.get("rym_rating_count", 0) or 0)
+            rym_score_text = _value_with_markers(
+                rym_score,
+                highlight=bool(release.get("highlight_rym_score", False)),
+                hot=bool(release.get("highlight_rym_score_super", False)),
+            )
+            rym_count_text = _value_with_markers(
+                rym_count,
+                highlight=bool(release.get("highlight_rym_ratings", False)),
+                hot=bool(release.get("highlight_rym_ratings_super", False)),
+            )
             url = release.get("url", "").strip()
             metal_tag = " [METAL-TAGGED]" if bool(release.get("is_metal_tagged", False)) else ""
             debug_suffix = _release_debug_suffix(release)
             details = (
                 f"(plays: {artist_plays}, user: {user_score} [{user_reviews}], "
-                f"critic: {critic_score} [{critic_reviews}], rym: {rym_score} [{rym_count}])"
+                f"critic: {critic_score} [{critic_reviews}], rym: {rym_score_text} [{rym_count_text}])"
             )
             if url:
                 lines.append(f"{i}. {artist} - {album}{metal_tag} {details} - {url}{debug_suffix}")
@@ -236,7 +256,11 @@ def render_email_html(
         rym_url = str(release.get("rym_url", "")).strip()
         url = release.get("url", "").strip()
         album_cell = _esc(album) if not url else f"<a href='{_esc(url)}'>{_esc(album)}</a>"
-        rym_cell = _metric_chip_html(rym_score)
+        rym_cell = _metric_chip_html(
+            rym_score,
+            active=bool(release.get("highlight_rym_score", False)),
+            hot=bool(release.get("highlight_rym_score_super", False)),
+        )
         if rym_url:
             rym_cell = f"<a href='{_esc(rym_url)}'>{rym_cell}</a>"
         row_classes: list[str] = []
@@ -253,7 +277,7 @@ def render_email_html(
             f"<td>{_metric_chip_html(critic_score, active=bool(release.get('highlight_critic_score', False)), hot=critic_score_hot)}</td>"
             f"<td>{_metric_chip_html(critic_reviews, active=bool(release.get('highlight_critic_reviews', False)))}</td>"
             f"<td>{rym_cell}</td>"
-            f"<td>{_metric_chip_html(rym_count)}</td></tr>"
+            f"<td>{_metric_chip_html(rym_count, active=bool(release.get('highlight_rym_ratings', False)), hot=bool(release.get('highlight_rym_ratings_super', False)))}</td></tr>"
         )
     if not release_rows:
         release_rows.append("<tr><td colspan='9'>No releases matched the current inclusion rules this run.</td></tr>")

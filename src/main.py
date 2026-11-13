@@ -35,6 +35,11 @@ METAL_TAG_KEYWORDS = (
 ALBUM_TAG_LIMIT = 50
 ARTIST_TAG_LIMIT = 20
 
+RYM_SCORE_HIGHLIGHT = 3.6
+RYM_SCORE_SUPER = 3.8
+RYM_RATINGS_HIGHLIGHT = 1000
+RYM_RATINGS_SUPER = 2000
+
 
 def _merge_tags(*tag_lists: list[str]) -> list[str]:
     merged: list[str] = []
@@ -161,6 +166,16 @@ def _attach_rym_ratings(releases: list[dict], lookup: dict[str, dict]) -> None:
         row["rym_source"] = str(match.get("source", "")).strip()
 
 
+def _annotate_rym_highlights(releases: list[dict]) -> None:
+    for row in releases:
+        score = _parse_float(row.get("rym_score", ""))
+        count = _parse_int(row.get("rym_rating_count", 0))
+        row["highlight_rym_score"] = score >= RYM_SCORE_HIGHLIGHT
+        row["highlight_rym_score_super"] = score >= RYM_SCORE_SUPER
+        row["highlight_rym_ratings"] = count >= RYM_RATINGS_HIGHLIGHT
+        row["highlight_rym_ratings_super"] = count >= RYM_RATINGS_SUPER
+
+
 def _enrich_recommendations_with_aoty(
     recommendations: list[dict],
     weekly_releases: list[dict],
@@ -271,6 +286,7 @@ def run_once() -> str:
             rym_lookup = {}
             rym_status = f"error: {type(exc).__name__}: {exc}"
         _attach_rym_ratings(weekly_releases, rym_lookup)
+        _annotate_rym_highlights(weekly_releases)
     recommendation_fetch_limit = max(config.recommendation_limit * 3, config.recommendation_limit + 8)
     recommendations = recommend_albums(
         client,

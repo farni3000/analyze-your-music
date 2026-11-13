@@ -18,6 +18,7 @@ This app builds a weekly listening report from Last.fm, adds recommendations, an
 - Rate Your Music enrichment: adds the RYM average score and rating count per release
 - Monthly cached full listening-history sync (artist listen counts) in `.listening_history.json`
 - New-release highlighting when you've listened to that artist at least 3 times
+- RYM highlighting: score at least `3.6` (highlight) / `3.8` (super) and at least `1000` (highlight) / `2000` (super) ratings
 - Friday scheduler mode with configurable run time (default `19:00`)
 - Optional email delivery when a report is generated
 - Optional LLM parsing for resilient release extraction
@@ -122,6 +123,11 @@ lookup is a separate browser launch, enrichment is the slowest part of a run
 (roughly 20-70 s per unmatched artist). Cap it with `RYM_MAX_ARTIST_LOOKUPS`
 (default `15`); set `RYM_ENABLED=false` to skip it entirely. Releases without a
 RYM match are shown as `rym: n/a [0]`.
+
+The RYM cells use the same two highlight levels as the AOTY columns: an orange
+highlight (`metric-hit`) from a score of `3.6` and `1000` ratings, a stronger
+"super" highlight (`score-hot`) from `3.8` and `2000` ratings. In the markdown
+report the levels are marked with `*` (highlight) and `**` (super).
 
 ## Gmail notes
 
