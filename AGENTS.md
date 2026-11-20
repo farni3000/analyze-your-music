@@ -36,8 +36,8 @@ python3 -m pytest                            # run tests (pytest + unittest)
 Or use the start script (creates the venv if needed):
 
 ```bash
-./start.sh          # scheduler loop
-./start.sh --once   # one report now
+./run.sh          # scheduler loop
+./run.sh --once   # one report now
 ```
 
 Entry point is `src/main.py`. Modules are imported package-relative
